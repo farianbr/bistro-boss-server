@@ -38,12 +38,24 @@ async function run() {
 
     });
 
+    // Cart APIs
+    app.get('/carts', async(req,res) => {
+      const email = req.query.email
+      if(!email){
+        res.send([])
+      }
+      const query = { email: email }
+      const result = await cartCollection.find(query).toArray()
+      res.send(result)
+    })
+
     app.post('/carts', async (req,res) => {
       const item = req.body
       console.log(item);
       const result = await cartCollection.insertOne(item)
       res.send(result)
     })
+
 
   } finally {
     // Ensures that the client will close when you finish/error
