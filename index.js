@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 
 const app = express();
@@ -34,29 +34,32 @@ async function run() {
     app.get("/menu", async (req, res) => {
       const menu = await menuCollection.find().toArray();
 
-      res.send(menu)
-
+      res.send(menu);
     });
 
     // Cart APIs
-    app.get('/carts', async(req,res) => {
-      const email = req.query.email
-      if(!email){
-        res.send([])
+    app.get("/carts", async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        res.send([]);
       }
-      const query = { email: email }
-      const result = await cartCollection.find(query).toArray()
+      const query = { email: email };
+      const result = await cartCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    app.post("/carts", async (req, res) => {
+      const item = req.body;
+      const result = await cartCollection.insertOne(item);
+      res.send(result);
+    });
+
+    app.delete("/carts/:id", async (req, res) => {
+      const id = req.params.id
+      const query = { _id: new ObjectId(id) };
+      const result = await cartCollection.deleteOne(query);
       res.send(result)
-    })
-
-    app.post('/carts', async (req,res) => {
-      const item = req.body
-      console.log(item);
-      const result = await cartCollection.insertOne(item)
-      res.send(result)
-    })
-
-
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
