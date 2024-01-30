@@ -1,7 +1,9 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-require("dotenv").config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 
 const app = express();
 const port = 3000;
@@ -9,6 +11,24 @@ const port = 3000;
 //middleware
 app.use(cors());
 app.use(express.json());
+
+const verifyJWT = (req,res,next) => {
+  const authorization = req.headers.authorization
+  if(!authorization){
+    return res.status(401).send({error: true, message: 'unauthorized access GG'})
+  }
+
+  const token = authorization.split(' ')[1]
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err,decoded) => {
+    if(err){
+      return res.status(401).send({error: true, message: 'unauthorized access'})
+    }
+    req.decoded = decoded
+    next()
+  })
+
+}
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.9p3ao1n.mongodb.net/?retryWrites=true&w=majority`;
 
@@ -31,8 +51,17 @@ async function run() {
     const menuCollection = client.db("bistroDB").collection("menu");
     const cartCollection = client.db("bistroDB").collection("carts");
     const userCollection = client.db("bistroDB").collection("users");
+    const paymentCollection = client.db("bistroDB").collection("payments");
 
-    //user APIs
+    app.post('/jwt',(req,res) => {
+      const user = req.body
+      const token = jwt.sign(user,process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h'})
+
+      res.send({token})
+      console.log("this is jwt token: ",token);
+    })
+
+    //-------user APIs-------
     app.get("/users", async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
@@ -70,19 +99,26 @@ async function run() {
       res.send(result);
     });
 
-    //menu APIs
+    //--------menu APIs--------
     app.get("/menu", async (req, res) => {
       const menu = await menuCollection.find().toArray();
 
       res.send(menu);
     });
 
-    // Cart APIs
-    app.get("/carts", async (req, res) => {
+    //---------Cart APIs---------
+    app.get("/carts", verifyJWT, async (req, res) => {
       const email = req.query.email;
+      
       if (!email) {
         res.send([]);
       }
+
+      const decodedEmail = req.decoded.email
+      if(decodedEmail !== email){
+        return res.status(403).send({error: true, message: 'forbidden access'})
+      }
+
       const query = { email: email };
       const result = await cartCollection.find(query).toArray();
       res.send(result);
@@ -100,6 +136,34 @@ async function run() {
       const result = await cartCollection.deleteOne(query);
       res.send(result);
     });
+
+    //--------payment APIs--------
+
+    app.post('/create-payment-intent', verifyJWT, async(req,res)=> {
+      const {price} = req.body
+      const amount = price*100
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card']
+      })
+
+      res.send({
+        clientSecret: paymentIntent.client_secret
+      })
+
+    })
+
+    app.post('/payments', verifyJWT, async(req,res) => {
+      const payment = req.body
+      const insertResult = await paymentCollection.insertOne(payment)
+
+      const query = {_id: { $in: payment.cartItems.map(id => new ObjectId(id))}}
+      const deleteResult = await cartCollection.deleteMany(query)
+
+      res.send({insertResult, deleteResult})
+    })
+
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
