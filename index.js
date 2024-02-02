@@ -58,7 +58,6 @@ async function run() {
       const token = jwt.sign(user,process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h'})
 
       res.send({token})
-      console.log("this is jwt token: ",token);
     })
 
     //-------user APIs-------
@@ -141,7 +140,7 @@ async function run() {
 
     app.post('/create-payment-intent', verifyJWT, async(req,res)=> {
       const {price} = req.body
-      const amount = price*100
+      const amount = parseInt(price*100)
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
         currency: 'usd',
@@ -162,6 +161,14 @@ async function run() {
       const deleteResult = await cartCollection.deleteMany(query)
 
       res.send({insertResult, deleteResult})
+    })
+
+    app.get('/payment-history', async(req,res) => {
+      const email = req.query.email;
+      console.log(email);
+      const query = { email: email };
+      const paymentHistory = await paymentCollection.find(query).toArray();
+      res.send(paymentHistory)
     })
 
   } finally {
